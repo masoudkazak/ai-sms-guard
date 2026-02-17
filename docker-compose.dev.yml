@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:18.1-alpine3.23
+    env_file: .env
+    container_name: postgres_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    env_file: .env
+    container_name: rabbitmq_dev
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    container_name: backend_dev
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    env_file: .env
+    container_name: worker_dev
+    volumes:
+      - ./worker:/app
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  streamlit:
+    build:
+      context: ./streamlit
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      BACKEND_URL: http://backend:8000
+    container_name: streamlit_dev
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data: {}
