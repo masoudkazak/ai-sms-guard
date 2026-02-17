@@ -2,11 +2,12 @@ import json
 import uuid
 import asyncio
 import os
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -41,8 +42,34 @@ def _ai_daily_key() -> str:
 
 
 class SmsRequest(BaseModel):
-    phone: str = Field(..., min_length=1)
+    phone: str = Field(..., min_length=1, max_length=32)
     body: str = Field(..., min_length=1)
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, v: str) -> str:
+        phone = (v or "").strip()
+        if not phone:
+            raise ValueError("phone is required")
+
+        # Allow separators commonly pasted by users, but store a normalized value.
+        phone = re.sub(r"[ \-\(\)]", "", phone)
+        if phone.startswith("00"):
+            phone = "+" + phone[2:]
+
+        if phone.startswith("+"):
+            digits = phone[1:]
+            if not digits.isdigit():
+                raise ValueError("phone must contain only digits (and an optional leading '+')")
+            if not (10 <= len(digits) <= 15):
+                raise ValueError("phone length must be 10..15 digits for E.164")
+            return "+" + digits
+
+        if not phone.isdigit():
+            raise ValueError("phone must contain only digits (and an optional leading '+')")
+        if not (10 <= len(phone) <= 15):
+            raise ValueError("phone length must be 10..15 digits")
+        return phone
 
 
 @router.get("/stats")

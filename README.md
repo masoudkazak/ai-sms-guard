@@ -1,6 +1,6 @@
-# Smart Rabbit
+# AI SMS Guard
 
-Smart Rabbit is a simple queue-based SMS delivery pipeline (RabbitMQ) focused on cost and risk control. Messages are first stored in Postgres and published to a queue. A worker then applies a rule engine to decide whether to send immediately or escalate to an “AI Guard” (to avoid duplicates, expensive multipart messages, or risky retries).
+AI SMS Guard is a simple queue-based SMS delivery pipeline (RabbitMQ) focused on cost and risk control. Messages are first stored in Postgres and published to a queue. A worker then applies a rule engine to decide whether to send immediately or escalate to an “AI Guard” (to avoid duplicates, expensive multipart messages, or risky retries).
 
 This project is meant to simulate/test scenarios like:
 - Preventing duplicate SMS sends (cost reduction + fewer user complaints)
@@ -61,7 +61,7 @@ docker compose -f docker-compose.dev.yml up --build -d
 ### 3) Endpoints
 
 - Backend: `http://localhost:8000`
-- Streamlit Dashboard: `http://localhost:8501`
+- Streamlit Dashboard + SMS Test: `http://localhost:8501`
 - RabbitMQ Management: `http://localhost:15672` (see `docker-compose.dev.yml` for ports)
 
 ### 4) Quick test
@@ -79,6 +79,9 @@ Fetch stats:
 ```bash
 curl "http://localhost:8000/stats"
 ```
+
+Or use Streamlit:
+- Open `http://localhost:8501` and use the **ارسال SMS (تست سامانه)** page in the sidebar.
 
 ### 5) Stop services
 

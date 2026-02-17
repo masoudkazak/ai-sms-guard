@@ -3,7 +3,10 @@ import os
 import requests
 import streamlit as st
 
-BACKEND_URL = os.environ.get("BACKEND_URL").rstrip("/")
+BACKEND_URL = os.environ.get("BACKEND_URL", "").rstrip("/")
+if not BACKEND_URL:
+    st.error("Missing BACKEND_URL env var (example: http://backend:8000).")
+    st.stop()
 
 
 def fetch_stats():
@@ -16,7 +19,7 @@ def fetch_stats():
     return by_status, ai, ai_today
 
 
-st.title("Smart Rabbit — Cost Dashboard")
+st.title("AI SMS Guard")
 
 try:
     by_status, ai, ai_today = fetch_stats()
