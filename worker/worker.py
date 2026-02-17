@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import threading
 from typing import Any
 
@@ -10,15 +9,15 @@ from rule_engine import classify
 from ai_guard import call_ai_guard
 from sms_sender_mock import send_sms
 import db as worker_db
+from env import (
+    OPENROUTER_MODEL,
+    RABBITMQ_DLQ,
+    RABBITMQ_MAIN_QUEUE,
+    RABBITMQ_URL,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
-RABBITMQ_MAIN_QUEUE = os.environ.get("RABBITMQ_MAIN_QUEUE")
-RABBITMQ_REVIEW_QUEUE = os.environ.get("RABBITMQ_REVIEW_QUEUE")
-RABBITMQ_DLQ = os.environ.get("RABBITMQ_DLQ")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL")
 
 
 def _ensure_queues(channel: pika.channel.Channel) -> None:
@@ -49,7 +48,6 @@ def _process_main_message(body: bytes) -> None:
         return
 
     if result == "REVIEW":
-        print(payload)
         decision_data, in_tok, out_tok = call_ai_guard(message_id, phone, body_text, retry_count, last_dlr, segment_count)
         decision = (decision_data.get("decision") or "DROP").upper()
         reason = decision_data.get("reason") or ""

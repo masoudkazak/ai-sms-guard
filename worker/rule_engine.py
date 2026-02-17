@@ -1,14 +1,10 @@
-import os
 import logging
 from typing import Literal
 
 import db as worker_db
+from env import DUPLICATE_WINDOW_SECONDS, MAX_RETRY_BEFORE_DLQ, MULTIPART_SEGMENT_THRESHOLD
 
 logger = logging.getLogger(__name__)
-
-DUPLICATE_WINDOW_SECONDS = int(os.environ.get("DUPLICATE_WINDOW_SECONDS", "300"))
-MAX_RETRY_BEFORE_DLQ = int(os.environ.get("MAX_RETRY_BEFORE_DLQ", "3"))
-MULTIPART_SEGMENT_THRESHOLD = int(os.environ.get("MULTIPART_SEGMENT_THRESHOLD", "2"))
 
 RuleResult = Literal["SEND", "REVIEW", "POISON"]
 

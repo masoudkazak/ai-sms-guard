@@ -1,11 +1,11 @@
-import os
 import logging
 import random
 from typing import Literal
 
+from env import MOCK_DLR_OVERRIDE
+
 logger = logging.getLogger(__name__)
 
-MOCK_DLR_OVERRIDE = os.environ.get("MOCK_DLR", "").upper() or None
 if MOCK_DLR_OVERRIDE and MOCK_DLR_OVERRIDE not in ("DELIVERED", "FAILED", "BLOCKED", "TIMEOUT"):
     MOCK_DLR_OVERRIDE = None
 

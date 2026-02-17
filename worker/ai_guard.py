@@ -1,16 +1,12 @@
-import os
 import json
 import logging
 from typing import Any
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from env import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL, OPENROUTER_TIMEOUT
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL")
-OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL").rstrip("/")
-OPENROUTER_TIMEOUT = int(os.environ.get("OPENROUTER_TIMEOUT", "300"))
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an SMS cost guard. Reply only with a single JSON object, no other text.
 Output format: {"decision": "DROP"|"RETRY"|"REWRITE", "reason": "short reason"}
@@ -24,6 +20,7 @@ def _build_user_prompt(message_id: str, phone: str, body: str, retry_count: int,
         f"message_id={message_id} phone={phone} retry_count={retry_count} last_dlr={last_dlr or 'none'} segments={segment_count}\n"
         f"body: {body[:500]}"
     )
+
 
 def _safe_json_parse(text: str) -> dict[str, Any]:
     text = text.strip()
@@ -73,7 +70,6 @@ def call_ai_guard(
     try:
         with httpx.Client(timeout=OPENROUTER_TIMEOUT) as client:
             r = client.post(url, json=payload, headers=headers)
-            logger.info(r)
             r.raise_for_status()
             data = r.json()
             logger.info(data)

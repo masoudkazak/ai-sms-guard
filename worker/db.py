@@ -1,17 +1,11 @@
-import os
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 
-logger = logging.getLogger(__name__)
+from env import DATABASE_URL
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL_SYNC",
-    os.environ.get("DATABASE_URL").replace(
-        "postgresql+asyncpg", "postgresql"
-    ).replace("+asyncpg", ""),
-)
+logger = logging.getLogger(__name__)
 
 
 @contextmanager

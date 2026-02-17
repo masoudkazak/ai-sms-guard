@@ -1,7 +1,8 @@
-import os
 import subprocess
 
 from watchfiles import run_process
+
+from env import WATCH_PATH
 
 
 def _run_worker() -> None:
@@ -9,5 +10,4 @@ def _run_worker() -> None:
 
 
 if __name__ == "__main__":
-    watch_path = os.environ.get("WATCH_PATH", "/app")
-    run_process(watch_path, target=_run_worker)
+    run_process(WATCH_PATH, target=_run_worker)
