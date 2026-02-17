@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from db import get_db
 from models import SmsEvent, SmsStatus
-from rabbit import _publish_to_main_queue
+from publisher import _publish_to_main_queue
 
 router = APIRouter()
 
