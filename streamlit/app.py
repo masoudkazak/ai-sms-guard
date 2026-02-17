@@ -3,7 +3,7 @@ import os
 import requests
 import streamlit as st
 
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://backend:8000").rstrip("/")
+BACKEND_URL = os.environ.get("BACKEND_URL").rstrip("/")
 
 
 def fetch_stats():
@@ -29,17 +29,23 @@ ai_calls = ai["cnt"]
 in_tok = ai["in_tok"]
 out_tok = ai["out_tok"]
 
-# Rough cost: e.g. $0.002/1K input, $0.002/1K output (example; configurable)
-INPUT_COST_PER_1K = float(os.environ.get("INPUT_COST_PER_1K", "0.002"))
-OUTPUT_COST_PER_1K = float(os.environ.get("OUTPUT_COST_PER_1K", "0.002"))
-cost_ai = (in_tok / 1000.0) * INPUT_COST_PER_1K + (out_tok / 1000.0) * OUTPUT_COST_PER_1K
+# AI token cost defaults (based on the ranges you provided):
+# - Input:  $0.10–$0.13 per 1M tokens  => $0.00010–$0.00013 per 1K tokens (default: midpoint $0.000115)
+# - Output: $0.32–$0.40 per 1M tokens  => $0.00032–$0.00040 per 1K tokens (default: midpoint $0.00036)
+INPUT_COST_PER_1K = float(os.environ.get("INPUT_COST_PER_1K"))
+OUTPUT_COST_PER_1K = float(os.environ.get("OUTPUT_COST_PER_1K"))
+USD_TO_TOMAN = float(os.environ.get("USD_TO_TOMAN"))
+cost_ai_usd = (in_tok / 1000.0) * INPUT_COST_PER_1K + (out_tok / 1000.0) * OUTPUT_COST_PER_1K
+cost_ai_toman = cost_ai_usd * USD_TO_TOMAN
 
 # SMS cost saved: blocked messages we did not send (example cost per SMS)
-COST_PER_SMS = float(os.environ.get("COST_PER_SMS", "0.01"))
+COST_PER_SMS = float(os.environ.get("COST_PER_SMS"))
 cost_sms_saved = blocked * COST_PER_SMS
+net_saving = cost_sms_saved - cost_ai_toman
 
 st.metric("SMS ارسال شده", sent)
 st.metric("SMS بلاک شده", blocked)
 st.metric("تعداد AI Call", ai_calls)
-st.metric("هزینه تخمینی AI (دلار)", f"{cost_ai:.4f}")
-st.metric("هزینه SMS صرفه‌جویی‌شده (دلار)", f"{cost_sms_saved:.2f}")
+st.metric("هزینه تخمینی AI (تومان)", f"{cost_ai_toman}")
+st.metric("هزینه SMS صرفه‌جویی‌شده (تومان)", f"{cost_sms_saved}")
+st.metric("صرفه‌جویی خالص (تومان)", f"{net_saving}")
