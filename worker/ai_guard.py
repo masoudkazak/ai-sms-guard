@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL")
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL").rstrip("/")
-OPENROUTER_TIMEOUT = int(os.environ.get("OPENROUTER_TIMEOUT", "15"))
+OPENROUTER_TIMEOUT = int(os.environ.get("OPENROUTER_TIMEOUT", "300"))
 
 SYSTEM_PROMPT = """You are an SMS cost guard. Reply only with a single JSON object, no other text.
 Output format: {"decision": "DROP"|"RETRY"|"REWRITE", "reason": "short reason"}
