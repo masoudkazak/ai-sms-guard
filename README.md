@@ -112,5 +112,4 @@ All key env vars are listed in `.env.example`. The most important ones:
 
 ## Development notes
 
-- `backend` and `worker` are bind-mounted in compose, but Uvicorn is not started with `--reload`, so you may need to restart containers to pick up code changes.
-- Alembic runs `upgrade head` automatically when `backend` starts.
+- When `APP_ENV=DEV`, `backend`, `worker`, and `streamlit` auto-reload on code changes.

@@ -50,6 +50,8 @@ services:
     environment:
       BACKEND_URL: http://backend:8000
     container_name: streamlit_dev
+    volumes:
+      - ./streamlit:/app
     ports:
       - "8501:8501"
     depends_on:

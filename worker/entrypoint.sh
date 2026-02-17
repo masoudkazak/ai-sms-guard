@@ -24,4 +24,9 @@ if [ -z "${DATABASE_URL_SYNC}" ] && [ -n "${DATABASE_URL}" ]; then
     export DATABASE_URL_SYNC="${DATABASE_URL_SYNC/+asyncpg/}"
 fi
 
+APP_ENV_EFFECTIVE="${APP_ENV:-${ENV:-PROD}}"
+if [ "${APP_ENV_EFFECTIVE}" = "DEV" ]; then
+    exec python dev_reload.py
+fi
+
 exec python worker.py

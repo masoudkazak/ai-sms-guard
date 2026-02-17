@@ -20,4 +20,9 @@ wait_for_port "${RABBITMQ_HOST:-rabbitmq}" "${RABBITMQ_PORT:-5672}"
 
 alembic -c alembic.ini upgrade head
 
+APP_ENV_EFFECTIVE="${APP_ENV:-${ENV:-PROD}}"
+if [ "${APP_ENV_EFFECTIVE}" = "DEV" ]; then
+    exec uvicorn main:app --host "${BACKEND_HOST:-0.0.0.0}" --port "${BACKEND_PORT:-8000}" --reload --reload-dir /app
+fi
+
 exec uvicorn main:app --host "${BACKEND_HOST:-0.0.0.0}" --port "${BACKEND_PORT:-8000}"
