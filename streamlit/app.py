@@ -12,13 +12,14 @@ def fetch_stats():
     payload = resp.json() or {}
     by_status = payload.get("by_status") or {}
     ai = payload.get("ai") or {"cnt": 0, "in_tok": 0, "out_tok": 0}
-    return by_status, ai
+    ai_today = payload.get("ai_today") or {"cnt": 0, "limit": 50, "remaining": 50, "redis_ok": True}
+    return by_status, ai, ai_today
 
 
 st.title("Smart Rabbit — Cost Dashboard")
 
 try:
-    by_status, ai = fetch_stats()
+    by_status, ai, ai_today = fetch_stats()
 except Exception as e:
     st.error(f"Backend error: {e}")
     st.stop()
@@ -28,6 +29,10 @@ blocked = by_status.get("BLOCKED", 0)
 ai_calls = ai["cnt"]
 in_tok = ai["in_tok"]
 out_tok = ai["out_tok"]
+ai_today_used = int(ai_today.get("cnt", 0))
+ai_today_limit = int(ai_today.get("limit", 50))
+ai_today_remaining = int(ai_today.get("remaining", max(0, ai_today_limit - ai_today_used)))
+redis_ok = bool(ai_today.get("redis_ok", True))
 
 # AI token cost defaults (based on the ranges you provided):
 # - Input:  $0.10–$0.13 per 1M tokens  => $0.00010–$0.00013 per 1K tokens (default: midpoint $0.000115)
@@ -46,6 +51,12 @@ net_saving = cost_sms_saved - cost_ai_toman
 st.metric("SMS ارسال شده", sent)
 st.metric("SMS بلاک شده", blocked)
 st.metric("تعداد AI Call", ai_calls)
+st.metric("AI امروز", f"{ai_today_used} / {ai_today_limit}")
+st.metric("باقی‌مانده AI امروز", ai_today_remaining)
+if not redis_ok:
+    st.warning("Redis در دسترس نیست؛ rate limit ممکن است درست نمایش داده نشود.")
+elif ai_today_remaining <= 0:
+    st.warning("میزان استفاده از AI برای امروز تمام شد.")
 st.metric("هزینه تخمینی AI (تومان)", f"{cost_ai_toman}")
 st.metric("هزینه SMS صرفه‌جویی‌شده (تومان)", f"{cost_sms_saved}")
 st.metric("صرفه‌جویی خالص (تومان)", f"{net_saving}")

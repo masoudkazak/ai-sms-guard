@@ -14,6 +14,7 @@ This project is meant to simulate/test scenarios like:
 - `worker` (Python): consumes the main queue and DLQ, runs the rule engine, calls the AI Guard (OpenRouter) when needed
 - `postgres`: stores SMS events and AI call logs
 - `rabbitmq`: queues (`sms_main`, `sms_dlq`)
+- `redis`: daily AI rate limit counter (resets at midnight)
 - `streamlit`: stats + cost estimate dashboard
 
 ## Tech stack
@@ -102,6 +103,7 @@ All key env vars are listed in `.env.example`. The most important ones:
   - `MULTIPART_SEGMENT_THRESHOLD`
 - OpenRouter (AI Guard) settings:
   - `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_TIMEOUT`
+  - `AI_DAILY_CALL_LIMIT`, `REDIS_URL` (daily rate limit via Redis; UTC-based)
 
 ## Repository layout
 

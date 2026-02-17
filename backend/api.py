@@ -1,6 +1,9 @@
 import json
 import uuid
 import asyncio
+import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -8,11 +11,33 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+import redis
+
 from db import get_db
 from models import SmsEvent, SmsStatus
 from publisher import _publish_to_main_queue
 
 router = APIRouter()
+
+_redis_client = None
+
+
+def _get_redis():
+    global _redis_client
+    if _redis_client is None:
+        redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+        _redis_client = redis.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=1.0,
+            socket_connect_timeout=1.0,
+        )
+    return _redis_client
+
+
+def _ai_daily_key() -> str:
+    day = datetime.now(tz=ZoneInfo("UTC")).date().isoformat()
+    return f"ai_guard_calls:{day}"
 
 
 class SmsRequest(BaseModel):
@@ -32,7 +57,29 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
         )
     )
     ai = res.mappings().first() or {"cnt": 0, "in_tok": 0, "out_tok": 0}
-    return {"by_status": by_status, "ai": dict(ai)}
+
+    ai_daily_limit = int(os.environ.get("AI_DAILY_CALL_LIMIT", "50"))
+    ai_today_used = 0
+    redis_ok = True
+    try:
+        r = _get_redis()
+        raw = r.get(_ai_daily_key())
+        ai_today_used = int(raw or 0)
+    except Exception:
+        redis_ok = False
+
+    ai_today_remaining = max(0, ai_daily_limit - ai_today_used)
+
+    return {
+        "by_status": by_status,
+        "ai": dict(ai),
+        "ai_today": {
+            "cnt": ai_today_used,
+            "limit": ai_daily_limit,
+            "remaining": ai_today_remaining,
+            "redis_ok": redis_ok,
+        },
+    }
 
 
 @router.post("/sms")

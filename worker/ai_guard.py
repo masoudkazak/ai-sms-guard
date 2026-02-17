@@ -4,7 +4,15 @@ from typing import Any
 
 import httpx
 
-from env import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL, OPENROUTER_TIMEOUT
+from env import (
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_MODEL,
+    OPENROUTER_TIMEOUT,
+    REDIS_URL,
+    AI_DAILY_CALL_LIMIT,
+)
+from rate_limiter import try_consume_daily_limit
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +58,25 @@ def call_ai_guard(
     if not OPENROUTER_API_KEY:
         logger.warning("OPENROUTER_API_KEY not set; returning default DROP")
         return ({"decision": "DROP", "reason": "AI not configured"}, 0, 0)
+
+    limit_result = try_consume_daily_limit(
+        REDIS_URL,
+        key_prefix="ai_guard_calls",
+        limit=AI_DAILY_CALL_LIMIT,
+        tz_name="UTC",
+    )
+    if not limit_result.allowed:
+        return (
+            {
+                "decision": "DROP",
+                "reason": "میزان استفاده از AI برای امروز تمام شد.",
+                "rate_limited": True,
+                "used_today": limit_result.used_today,
+                "limit": AI_DAILY_CALL_LIMIT,
+            },
+            0,
+            0,
+        )
 
     url = f"{OPENROUTER_BASE_URL}/chat/completions"
     payload = {

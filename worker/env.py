@@ -13,6 +13,9 @@ OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL")
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL").rstrip("/")
 OPENROUTER_TIMEOUT = int(os.environ.get("OPENROUTER_TIMEOUT", "300"))
 
+REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+AI_DAILY_CALL_LIMIT = int(os.environ.get("AI_DAILY_CALL_LIMIT", "50"))
+
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 RABBITMQ_MAIN_QUEUE = os.environ.get("RABBITMQ_MAIN_QUEUE")
 RABBITMQ_REVIEW_QUEUE = os.environ.get("RABBITMQ_REVIEW_QUEUE")

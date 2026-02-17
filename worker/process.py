@@ -42,6 +42,9 @@ def _process_main_message(body: bytes) -> None:
         sms_row = worker_db.get_sms_by_message_id(message_id)
         sms_event_id = sms_row["id"] if sms_row else None
         worker_db.insert_ai_call(sms_event_id, OPENROUTER_MODEL, in_tok, out_tok, decision, reason)
+        if decision_data.get("rate_limited"):
+            worker_db.update_sms_status(message_id, "BLOCKED")
+            return
         worker_db.update_sms_status(message_id, "IN_REVIEW")
         if decision == "RETRY":
             payload["retry_count"] = retry_count + 1
@@ -75,6 +78,9 @@ def _process_dlq_message(body: bytes) -> None:
     sms_row = worker_db.get_sms_by_message_id(message_id)
     sms_event_id = sms_row["id"] if sms_row else None
     worker_db.insert_ai_call(sms_event_id, OPENROUTER_MODEL, in_tok, out_tok, decision, reason)
+    if decision_data.get("rate_limited"):
+        worker_db.update_sms_status(message_id, "BLOCKED")
+        return
 
     if decision == "RETRY":
         payload["retry_count"] = retry_count + 1
