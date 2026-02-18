@@ -21,9 +21,8 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an SMS cost guard. Reply only with a single JSON object, no other text.
 Output format:
-{"decision": "DROP"|"RETRY"|"REWRITE", "reason": "short reason", "body": "shortened sms when decision=REWRITE"}
+{"decision": "DROP"|"REWRITE", "reason": "short reason", "body": "shortened sms when decision=REWRITE"}
 - DROP: do not send, avoid cost (duplicate, low value, permanent failure).
-- RETRY: send again (e.g. temporary timeout).
 - REWRITE: provide a shortened SMS that preserves meaning. The "body" must be <= max_chars."""
 
 

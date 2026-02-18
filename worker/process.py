@@ -6,7 +6,7 @@ import dedup
 from rule_engine import classify
 from ai_guard import call_ai_guard
 from sms_sender_mock import send_sms
-from env import DUPLICATE_WINDOW_SECONDS, OPENROUTER_MODEL, REDIS_URL
+from env import DUPLICATE_WINDOW_SECONDS, OPENROUTER_MODEL, REDIS_URL, MAX_RETRY_BEFORE_DLQ
 from publisher import _publish_to_dlq, _publish_to_main
 
 
@@ -44,6 +44,13 @@ def _process_main_message(body: bytes) -> None:
         return
 
     if result == "REVIEW":
+        # Deterministic retry for TIMEOUT before involving AI
+        if last_dlr == "TIMEOUT" and retry_count < MAX_RETRY_BEFORE_DLQ:
+            payload["retry_count"] = retry_count + 1
+            _publish_to_main(payload)
+            worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count + 1)
+            return
+
         decision_data, in_tok, out_tok = call_ai_guard(message_id, phone, body_text, retry_count, last_dlr, segment_count)
         decision = (decision_data.get("decision") or "DROP").upper()
         reason = decision_data.get("reason") or ""
@@ -55,11 +62,7 @@ def _process_main_message(body: bytes) -> None:
             dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
             return
         worker_db.update_sms_status(message_id, "IN_REVIEW")
-        if decision == "RETRY":
-            payload["retry_count"] = retry_count + 1
-            _publish_to_main(payload)
-            worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count + 1)
-        elif decision == "REWRITE":
+        if decision == "REWRITE":
             rewritten_body = (decision_data.get("body") or "").strip()
             if not rewritten_body:
                 worker_db.update_sms_status(message_id, "BLOCKED")
@@ -89,37 +92,8 @@ def _process_dlq_message(body: bytes) -> None:
         logger.warning("DLQ invalid JSON")
         return
     message_id = payload.get("message_id", "")
-    phone = payload.get("phone", "")
-    body_text = payload.get("body", "")
-    retry_count = int(payload.get("retry_count", 0))
-    segment_count = int(payload.get("segment_count", 1))
-    last_dlr = payload.get("last_dlr")
 
-    decision_data, in_tok, out_tok = call_ai_guard(message_id, phone, body_text, retry_count, last_dlr, segment_count)
-    decision = (decision_data.get("decision") or "DROP").upper()
-    reason = decision_data.get("reason") or ""
-    sms_row = worker_db.get_sms_by_message_id(message_id)
-    sms_event_id = sms_row["id"] if sms_row else None
-    worker_db.insert_ai_call(sms_event_id, OPENROUTER_MODEL, in_tok, out_tok, decision, reason)
-    if decision_data.get("rate_limited"):
-        worker_db.update_sms_status(message_id, "BLOCKED")
-        return
-
-    if decision == "RETRY":
-        payload["retry_count"] = retry_count + 1
-        _publish_to_main(payload)
-        worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count + 1)
-    elif decision == "REWRITE":
-        rewritten_body = (decision_data.get("body") or "").strip()
-        if not rewritten_body:
-            worker_db.update_sms_status(message_id, "BLOCKED")
-            return
-        worker_db.update_sms_rewritten_body(message_id, rewritten_body)
-        worker_db.update_sms_segment_count(message_id, 1)
-        payload["body"] = rewritten_body
-        payload["segment_count"] = 1
-        _publish_to_main(payload)
-        worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count)
-    else:
-        worker_db.update_sms_status(message_id, "BLOCKED")
+    # DLQ is a quarantine sink. We intentionally do not call AI from DLQ to avoid extra costs.
+    worker_db.update_sms_status(message_id, "BLOCKED")
+    dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
     return

@@ -11,7 +11,7 @@ This project is meant to simulate/test scenarios like:
 ## Architecture at a glance
 
 - `backend` (FastAPI): accepts `/sms`, stores events in Postgres, publishes messages to RabbitMQ
-- `worker` (Python): consumes the main queue and DLQ, runs the rule engine, calls the AI Guard (OpenRouter) when needed
+- `worker` (Python): consumes the main queue and DLQ, runs the rule engine, calls the AI Guard (OpenRouter) when needed (main queue review path only)
 - `postgres`: stores SMS events and AI call logs
 - `rabbitmq`: queues (`sms_main`, `sms_dlq`)
 - `redis`: dedup window keys (Scenario 5) + daily AI rate limit counter (resets at midnight)

@@ -23,7 +23,7 @@ def classify(
     last_dlr: str | None,
     segment_count: int,
 ) -> RuleResult:
-    # Scenario 1: Retry on permanent failure -> internal cost; send to DLQ for AI decision
+    # Scenario 1: Retry on permanent failure -> internal cost; quarantine to DLQ
     if retry_count >= MAX_RETRY_BEFORE_DLQ:
         logger.info("Rule: POISON (retry_count=%s >= %s)", retry_count, MAX_RETRY_BEFORE_DLQ)
         return "POISON"
