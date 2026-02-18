@@ -2,10 +2,11 @@ import json
 import logging
 import db as worker_db
 
+import dedup
 from rule_engine import classify
 from ai_guard import call_ai_guard
 from sms_sender_mock import send_sms
-from env import OPENROUTER_MODEL
+from env import DUPLICATE_WINDOW_SECONDS, OPENROUTER_MODEL, REDIS_URL
 from publisher import _publish_to_dlq, _publish_to_main
 
 
@@ -33,6 +34,13 @@ def _process_main_message(body: bytes) -> None:
         status = "SENT" if dlr == "DELIVERED" else "PENDING"
         next_retry = retry_count if dlr == "DELIVERED" else retry_count + 1
         worker_db.update_sms_status(message_id, status, last_dlr=dlr, retry_count=next_retry)
+        if dlr == "DELIVERED":
+            dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
+        return
+
+    if result == "DROP":
+        worker_db.update_sms_status(message_id, "BLOCKED")
+        dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
         return
 
     if result == "REVIEW":
@@ -44,6 +52,7 @@ def _process_main_message(body: bytes) -> None:
         worker_db.insert_ai_call(sms_event_id, OPENROUTER_MODEL, in_tok, out_tok, decision, reason)
         if decision_data.get("rate_limited"):
             worker_db.update_sms_status(message_id, "BLOCKED")
+            dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
             return
         worker_db.update_sms_status(message_id, "IN_REVIEW")
         if decision == "RETRY":
@@ -52,10 +61,12 @@ def _process_main_message(body: bytes) -> None:
             worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count + 1)
         else:
             worker_db.update_sms_status(message_id, "BLOCKED")
+            dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
         return
 
     _publish_to_dlq(body)
     worker_db.update_sms_status(message_id, "IN_DLQ")
+    dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
     return
 
 

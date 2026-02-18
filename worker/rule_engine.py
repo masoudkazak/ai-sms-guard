@@ -1,12 +1,12 @@
 import logging
 from typing import Literal
 
-import db as worker_db
-from env import DUPLICATE_WINDOW_SECONDS, MAX_RETRY_BEFORE_DLQ, MULTIPART_SEGMENT_THRESHOLD
+import dedup
+from env import DUPLICATE_WINDOW_SECONDS, MAX_RETRY_BEFORE_DLQ, MULTIPART_SEGMENT_THRESHOLD, REDIS_URL
 
 logger = logging.getLogger(__name__)
 
-RuleResult = Literal["SEND", "REVIEW", "POISON"]
+RuleResult = Literal["SEND", "REVIEW", "POISON", "DROP"]
 
 
 def classify(
@@ -40,15 +40,19 @@ def classify(
         logger.info("Rule: REVIEW (long body + segments message_id=%s)", message_id)
         return "REVIEW"
 
-    # Scenario 5: Duplicate SMS -> internal cost; REVIEW so AI can DROP
-    duplicate_message_id, duplicate_phone_body = worker_db.get_duplicate_flags(
-        message_id, phone, body, DUPLICATE_WINDOW_SECONDS
+    # Scenario 5: Duplicate SMS -> internal cost; DROP
+    duplicate_message_id, duplicate_phone_body = dedup.get_duplicate_flags(
+        REDIS_URL,
+        message_id=message_id,
+        phone=phone,
+        body=body,
+        window_seconds=DUPLICATE_WINDOW_SECONDS,
     )
     if duplicate_message_id:
-        logger.info("Rule: REVIEW (duplicate message_id=%s)", message_id)
-        return "REVIEW"
+        logger.info("Rule: DROP (duplicate message_id=%s)", message_id)
+        return "DROP"
     if duplicate_phone_body:
-        logger.info("Rule: REVIEW (duplicate phone+body in window)")
-        return "REVIEW"
+        logger.info("Rule: DROP (duplicate phone+body in window)")
+        return "DROP"
 
     return "SEND"
