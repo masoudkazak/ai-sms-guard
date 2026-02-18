@@ -17,9 +17,10 @@ import redis
 from db import get_db
 from models import SmsEvent, SmsStatus
 from publisher import _publish_to_main_queue
+from config import get_settings
 
 router = APIRouter()
-
+settings = get_settings()
 _redis_client = None
 
 
@@ -112,7 +113,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 @router.post("/sms")
 async def send_sms(request: SmsRequest, db: AsyncSession = Depends(get_db)):
     message_id = str(uuid.uuid4())
-    segment_count = max(1, (len(request.body) + 159) // 160)
+    segment_count = max(1, (len(request.body) + (settings.MAX_BODY_CHARS - 1)) // settings.MAX_BODY_CHARS)
 
     event = SmsEvent(
         message_id=message_id,

@@ -10,12 +10,16 @@ ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     APP_ENV: str
+
     DATABASE_URL: str 
     POSTGRES_USER: str 
     POSTGRES_PASSWORD: str 
     POSTGRES_DB: str 
+
     RABBITMQ_URL: str 
     RABBITMQ_MAIN_QUEUE: str 
+
+    MAX_BODY_CHARS: int = 320
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

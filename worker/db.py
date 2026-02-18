@@ -25,7 +25,7 @@ def get_sms_by_message_id(message_id: str) -> dict | None:
     with get_conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                "SELECT id, message_id, phone, body, status, retry_count, segment_count, last_dlr FROM sms_events WHERE message_id = %s",
+                "SELECT id, message_id, phone, body, rewritten_body, status, retry_count, segment_count, last_dlr FROM sms_events WHERE message_id = %s",
                 (message_id,),
             )
             row = cur.fetchone()
@@ -45,6 +45,24 @@ def update_sms_status(message_id: str, status: str, last_dlr: str | None = None,
                     "UPDATE sms_events SET status = %s, last_dlr = COALESCE(%s, last_dlr), updated_at = NOW() WHERE message_id = %s",
                     (status, last_dlr, message_id),
                 )
+
+
+def update_sms_rewritten_body(message_id: str, rewritten_body: str) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sms_events SET rewritten_body = %s, updated_at = NOW() WHERE message_id = %s",
+                (rewritten_body, message_id),
+            )
+
+
+def update_sms_segment_count(message_id: str, segment_count: int) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sms_events SET segment_count = %s, updated_at = NOW() WHERE message_id = %s",
+                (segment_count, message_id),
+            )
 
 
 def insert_ai_call(sms_event_id: int | None, model: str, input_tokens: int, output_tokens: int, decision: str | None, reason: str | None) -> None:

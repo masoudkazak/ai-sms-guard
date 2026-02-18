@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -11,21 +12,25 @@ from env import (
     OPENROUTER_TIMEOUT,
     REDIS_URL,
     AI_DAILY_CALL_LIMIT,
+    MAX_BODY_CHARS,
+    AI_GUARD_MAX_TOKENS,
 )
 from rate_limiter import try_consume_daily_limit
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an SMS cost guard. Reply only with a single JSON object, no other text.
-Output format: {"decision": "DROP"|"RETRY"|"REWRITE", "reason": "short reason"}
+Output format:
+{"decision": "DROP"|"RETRY"|"REWRITE", "reason": "short reason", "body": "shortened sms when decision=REWRITE"}
 - DROP: do not send, avoid cost (duplicate, low value, permanent failure).
 - RETRY: send again (e.g. temporary timeout).
-- REWRITE: suggest shortening or splitting (e.g. multipart cost)."""
+- REWRITE: provide a shortened SMS that preserves meaning. The "body" must be <= max_chars."""
 
 
 def _build_user_prompt(message_id: str, phone: str, body: str, retry_count: int, last_dlr: str | None, segment_count: int) -> str:
     return (
-        f"message_id={message_id} phone={phone} retry_count={retry_count} last_dlr={last_dlr or 'none'} segments={segment_count}\n"
+        f"message_id={message_id} phone={phone} retry_count={retry_count} last_dlr={last_dlr or 'none'} "
+        f"segments={segment_count} max_chars={MAX_BODY_CHARS}\n"
         f"body: {body[:500]}"
     )
 
@@ -45,6 +50,37 @@ def _safe_json_parse(text: str) -> dict[str, Any]:
         text = text[start:end + 1]
 
     return json.loads(text)
+
+def _extract_partial_fields(text: str) -> dict[str, Any]:
+    def _extract_string_field(name: str) -> str | None:
+        match = re.search(rf"\"{name}\"\\s*:\\s*\"", text)
+        if not match:
+            return None
+        start = match.end()
+        i = start
+        escaped = False
+        while i < len(text):
+            ch = text[i]
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == "\"":
+                return text[start:i]
+            i += 1
+        return text[start:] if start < len(text) else None
+
+    result: dict[str, Any] = {}
+    for field in ("decision", "reason", "body"):
+        raw = _extract_string_field(field)
+        if raw is None:
+            continue
+        try:
+            value = json.loads(f"\"{raw}\"")
+        except json.JSONDecodeError:
+            value = raw.rstrip("\\")
+        result[field] = value
+    return result
 
 
 def call_ai_guard(
@@ -85,7 +121,7 @@ def call_ai_guard(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": _build_user_prompt(message_id, phone, body, retry_count, last_dlr, segment_count)},
         ],
-        "max_tokens": 60,
+        "max_tokens": AI_GUARD_MAX_TOKENS,
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
@@ -107,7 +143,9 @@ def call_ai_guard(
     usage = data.get("usage", {}) or {}
     input_tokens = int(usage.get("prompt_tokens", 0))
     output_tokens = int(usage.get("completion_tokens", 0))
-    content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "{}")
+    choice = (data.get("choices") or [{}])[0]
+    finish_reason = choice.get("finish_reason")
+    content = (choice.get("message") or {}).get("content", "{}")
     try:
         content = content.strip()
         if content.startswith("```"):
@@ -117,7 +155,11 @@ def call_ai_guard(
         decision_data = _safe_json_parse(content)
     except json.JSONDecodeError:
         logger.warning("AI returned non-JSON: %s", content[:200])
-        decision_data = {"decision": "DROP", "reason": "Invalid AI response"}
+        decision_data = _extract_partial_fields(content)
+        if not decision_data:
+            decision_data = {"decision": "DROP", "reason": "Invalid AI response"}
+    if finish_reason == "length" and decision_data.get("decision") == "REWRITE" and not decision_data.get("body"):
+        decision_data = {"decision": "DROP", "reason": "AI response truncated"}
     if "decision" not in decision_data:
         decision_data["decision"] = "DROP"
     if "reason" not in decision_data:

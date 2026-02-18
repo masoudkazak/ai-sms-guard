@@ -59,6 +59,18 @@ def _process_main_message(body: bytes) -> None:
             payload["retry_count"] = retry_count + 1
             _publish_to_main(payload)
             worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count + 1)
+        elif decision == "REWRITE":
+            rewritten_body = (decision_data.get("body") or "").strip()
+            if not rewritten_body:
+                worker_db.update_sms_status(message_id, "BLOCKED")
+                dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
+                return
+            worker_db.update_sms_rewritten_body(message_id, rewritten_body)
+            worker_db.update_sms_segment_count(message_id, 1)
+            payload["body"] = rewritten_body
+            payload["segment_count"] = 1
+            _publish_to_main(payload)
+            worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count)
         else:
             worker_db.update_sms_status(message_id, "BLOCKED")
             dedup.mark_message_id(REDIS_URL, message_id=message_id, ttl_seconds=DUPLICATE_WINDOW_SECONDS)
@@ -97,6 +109,17 @@ def _process_dlq_message(body: bytes) -> None:
         payload["retry_count"] = retry_count + 1
         _publish_to_main(payload)
         worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count + 1)
+    elif decision == "REWRITE":
+        rewritten_body = (decision_data.get("body") or "").strip()
+        if not rewritten_body:
+            worker_db.update_sms_status(message_id, "BLOCKED")
+            return
+        worker_db.update_sms_rewritten_body(message_id, rewritten_body)
+        worker_db.update_sms_segment_count(message_id, 1)
+        payload["body"] = rewritten_body
+        payload["segment_count"] = 1
+        _publish_to_main(payload)
+        worker_db.update_sms_status(message_id, "PENDING", retry_count=retry_count)
     else:
         worker_db.update_sms_status(message_id, "BLOCKED")
     return

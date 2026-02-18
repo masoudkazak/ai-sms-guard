@@ -2,7 +2,13 @@ import logging
 from typing import Literal
 
 import dedup
-from env import DUPLICATE_WINDOW_SECONDS, MAX_RETRY_BEFORE_DLQ, MULTIPART_SEGMENT_THRESHOLD, REDIS_URL
+from env import (
+    DUPLICATE_WINDOW_SECONDS,
+    MAX_RETRY_BEFORE_DLQ,
+    MULTIPART_SEGMENT_THRESHOLD,
+    REDIS_URL,
+    MAX_BODY_CHARS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +42,7 @@ def classify(
         return "REVIEW"
 
     # Scenario 4: Long message without multipart flag could still be high cost
-    if len(body) > 320 and segment_count >= 2:
+    if len(body) > MAX_BODY_CHARS and segment_count >= 2:
         logger.info("Rule: REVIEW (long body + segments message_id=%s)", message_id)
         return "REVIEW"
 

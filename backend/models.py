@@ -24,6 +24,7 @@ class SmsEvent(Base):
     message_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     phone: Mapped[str] = mapped_column(String(32), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    rewritten_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=SmsStatus.PENDING.value)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     segment_count: Mapped[int] = mapped_column(Integer, default=1)
