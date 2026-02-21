@@ -1,25 +1,20 @@
 import logging
-import random
-from typing import Literal
-
-from env import MOCK_DLR_OVERRIDE
+import uuid
 
 logger = logging.getLogger(__name__)
 
-if MOCK_DLR_OVERRIDE and MOCK_DLR_OVERRIDE not in ("DELIVERED", "FAILED", "BLOCKED", "TIMEOUT"):
-    MOCK_DLR_OVERRIDE = None
 
-
-def send_sms(phone: str, body: str, message_id: str) -> Literal["DELIVERED", "FAILED", "BLOCKED", "TIMEOUT"]:
-    logger.info("MOCK SMS send message_id=%s phone=%s body_len=%d", message_id, phone, len(body))
-    if MOCK_DLR_OVERRIDE:
-        return MOCK_DLR_OVERRIDE
-
-    r = random.random()
-    if r < 0.85:
-        return "DELIVERED"
-    if r < 0.95:
-        return "TIMEOUT"
-    if r < 0.98:
-        return "FAILED"
-    return "BLOCKED"
+def send_sms(phone: str, body: str) -> dict[str, int | str]:
+    provider_message_id = str(uuid.uuid4())
+    provider_status = 1
+    logger.info(
+        "MOCK SMS accepted provider_message_id=%s phone=%s body_len=%d provider_status=%s",
+        provider_message_id,
+        phone,
+        len(body),
+        provider_status,
+    )
+    return {
+        "message_id": provider_message_id,
+        "status": provider_status,
+    }

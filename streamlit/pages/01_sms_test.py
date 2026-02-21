@@ -84,4 +84,37 @@ if submitted:
         st.stop()
 
     st.success("در صف قرار گرفت.")
+    request_id = payload.get("request_id")
+    if request_id is not None:
+        st.info(f"request_id: {request_id}")
+    st.json(payload)
+
+st.divider()
+st.subheader("بررسی وضعیت پیام‌رسان")
+st.caption("بعد از ارسال، پیام‌رسان برای پیام `message_id` می‌سازد. آن مقدار را اینجا وارد کنید.")
+status_message_id = st.text_input("message_id", placeholder="شناسه پیام از پیام‌رسان")
+check_status = st.button("بررسی وضعیت")
+
+if check_status:
+    mid = (status_message_id or "").strip()
+    if not mid:
+        st.error("message_id را وارد کنید.")
+        st.stop()
+
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/sms/status",
+            params={"message_id": mid},
+            timeout=15,
+        )
+        payload = resp.json() if resp.content else {}
+        if resp.status_code >= 400:
+            st.error(f"Backend error: HTTP {resp.status_code}")
+            st.json(payload)
+            st.stop()
+    except Exception as e:
+        st.error(f"Backend error: {e}")
+        st.stop()
+
+    st.success("وضعیت دریافت شد.")
     st.json(payload)

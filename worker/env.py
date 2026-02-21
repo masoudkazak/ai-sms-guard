@@ -28,3 +28,15 @@ MAX_RETRY_BEFORE_DLQ = int(os.environ.get("MAX_RETRY_BEFORE_DLQ", "3"))
 MULTIPART_SEGMENT_THRESHOLD = int(os.environ.get("MULTIPART_SEGMENT_THRESHOLD", "2"))
 MAX_BODY_CHARS = int(os.environ.get("MAX_BODY_CHARS", "320"))
 AI_GUARD_MAX_TOKENS = int(os.environ.get("AI_GUARD_MAX_TOKENS", "160"))
+
+
+def _prob(name: str, default: str) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except ValueError:
+        return float(default)
+    return max(0.0, min(1.0, value))
+
+
+# Test-only: inject rare provider timeout to exercise retry/DLQ paths.
+MOCK_TIMEOUT_RETRY_PROB = _prob("MOCK_TIMEOUT_RETRY_PROB", "0.03")

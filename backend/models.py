@@ -21,7 +21,7 @@ class SmsEvent(Base):
     __tablename__ = "sms_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    message_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    message_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
     phone: Mapped[str] = mapped_column(String(32), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     rewritten_body: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -29,6 +29,7 @@ class SmsEvent(Base):
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     segment_count: Mapped[int] = mapped_column(Integer, default=1)
     last_dlr: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    provider_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 

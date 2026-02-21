@@ -1,27 +1,46 @@
-import json
-import uuid
 import asyncio
+import json
 import os
+import random
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, field_validator
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-
 import redis
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import get_settings
 from db import get_db
 from models import SmsEvent, SmsStatus
 from publisher import _publish_to_main_queue
-from config import get_settings
 
 router = APIRouter()
 settings = get_settings()
 _redis_client = None
+
+_PROVIDER_STATUS_TEXT = {
+    1: "در صف ارسال قرار دارد",
+    2: "زمان بندی شده (ارسال در تاریخ معین)",
+    4: "ارسال شده به مخابرات",
+    5: "ارسال شده به مخابرات",
+    6: "خطا در ارسال پیام (Failed)",
+    10: "رسیده به گیرنده (Delivered)",
+    11: "نرسیده به گیرنده (Undelivered)",
+    13: "لغو/مشکل ارسال با بازگشت هزینه",
+    14: "بلاک شده (عدم تمایل گیرنده)",
+    100: "شناسه پیامک نامعتبر است",
+}
+_FINAL_PROVIDER_CODES = {6, 10, 11, 13, 14, 100}
+_NEXT_PROVIDER_STATUS_POOL = (
+    10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+    11, 11, 11, 11,
+    6, 6, 6,
+    13,
+    14,
+)
 
 
 def _get_redis():
@@ -42,6 +61,10 @@ def _ai_daily_key() -> str:
     return f"ai_guard_calls:{day}"
 
 
+def _pick_next_status_from_queue() -> int:
+    return random.choice(_NEXT_PROVIDER_STATUS_POOL)
+
+
 class SmsRequest(BaseModel):
     phone: str = Field(..., min_length=1, max_length=32)
     body: str = Field(..., min_length=1)
@@ -53,7 +76,6 @@ class SmsRequest(BaseModel):
         if not phone:
             raise ValueError("phone is required")
 
-        # Allow separators commonly pasted by users, but store a normalized value.
         phone = re.sub(r"[ \-\(\)]", "", phone)
         if phone.startswith("00"):
             phone = "+" + phone[2:]
@@ -112,11 +134,10 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 @router.post("/sms")
 async def send_sms(request: SmsRequest, db: AsyncSession = Depends(get_db)):
-    message_id = str(uuid.uuid4())
     segment_count = max(1, (len(request.body) + (settings.MAX_BODY_CHARS - 1)) // settings.MAX_BODY_CHARS)
 
     event = SmsEvent(
-        message_id=message_id,
+        message_id=None,
         phone=request.phone,
         body=request.body,
         status=SmsStatus.PENDING.value,
@@ -128,7 +149,7 @@ async def send_sms(request: SmsRequest, db: AsyncSession = Depends(get_db)):
     await db.refresh(event)
 
     payload = {
-        "message_id": message_id,
+        "sms_event_id": event.id,
         "phone": request.phone,
         "body": request.body,
         "retry_count": 0,
@@ -137,4 +158,45 @@ async def send_sms(request: SmsRequest, db: AsyncSession = Depends(get_db)):
     }
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, lambda: _publish_to_main_queue(json.dumps(payload).encode()))
-    return {"message_id": message_id, "status": "queued"}
+    return {"request_id": event.id, "status": "queued"}
+
+
+@router.get("/sms/status")
+async def get_sms_provider_status(message_id: str = Query(..., min_length=1), db: AsyncSession = Depends(get_db)):
+    res = await db.execute(
+        text(
+            """
+            SELECT id, message_id, status, provider_status
+            FROM sms_events
+            WHERE message_id = :message_id
+            LIMIT 1
+            """
+        ),
+        {"message_id": message_id},
+    )
+    row = res.mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="message_id not found")
+
+    current_code = int(row.get("provider_status") or 1)
+    resolved_code = current_code
+
+    if current_code == 1:
+        resolved_code = _pick_next_status_from_queue()
+
+    if resolved_code != current_code:
+        await db.execute(
+            text("UPDATE sms_events SET provider_status = :code, updated_at = NOW() WHERE id = :id"),
+            {"code": resolved_code, "id": row["id"]},
+        )
+        await db.commit()
+
+    return {
+        "message_id": message_id,
+        "provider_status": {
+            "code": resolved_code,
+            "text": _PROVIDER_STATUS_TEXT.get(resolved_code, "وضعیت نامشخص"),
+            "final": resolved_code in _FINAL_PROVIDER_CODES,
+        },
+        "pipeline_status": row["status"],
+    }

@@ -1,7 +1,8 @@
 import logging
+from contextlib import contextmanager
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from contextlib import contextmanager
 
 from env import DATABASE_URL
 
@@ -21,15 +22,67 @@ def get_conn():
         conn.close()
 
 
+def get_sms_by_id(sms_event_id: int) -> dict | None:
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, message_id, phone, body, rewritten_body, status, retry_count, segment_count, last_dlr, provider_status
+                FROM sms_events
+                WHERE id = %s
+                """,
+                (sms_event_id,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
 def get_sms_by_message_id(message_id: str) -> dict | None:
     with get_conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                "SELECT id, message_id, phone, body, rewritten_body, status, retry_count, segment_count, last_dlr FROM sms_events WHERE message_id = %s",
+                """
+                SELECT id, message_id, phone, body, rewritten_body, status, retry_count, segment_count, last_dlr, provider_status
+                FROM sms_events
+                WHERE message_id = %s
+                """,
                 (message_id,),
             )
             row = cur.fetchone()
             return dict(row) if row else None
+
+
+def update_sms_status_by_id(
+    sms_event_id: int,
+    status: str,
+    last_dlr: str | None = None,
+    retry_count: int | None = None,
+) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if retry_count is not None:
+                cur.execute(
+                    """
+                    UPDATE sms_events
+                    SET status = %s,
+                        last_dlr = COALESCE(%s, last_dlr),
+                        retry_count = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (status, last_dlr, retry_count, sms_event_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE sms_events
+                    SET status = %s,
+                        last_dlr = COALESCE(%s, last_dlr),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (status, last_dlr, sms_event_id),
+                )
 
 
 def update_sms_status(message_id: str, status: str, last_dlr: str | None = None, retry_count: int | None = None) -> None:
@@ -37,31 +90,73 @@ def update_sms_status(message_id: str, status: str, last_dlr: str | None = None,
         with conn.cursor() as cur:
             if retry_count is not None:
                 cur.execute(
-                    "UPDATE sms_events SET status = %s, last_dlr = COALESCE(%s, last_dlr), retry_count = %s, updated_at = NOW() WHERE message_id = %s",
+                    """
+                    UPDATE sms_events
+                    SET status = %s,
+                        last_dlr = COALESCE(%s, last_dlr),
+                        retry_count = %s,
+                        updated_at = NOW()
+                    WHERE message_id = %s
+                    """,
                     (status, last_dlr, retry_count, message_id),
                 )
             else:
                 cur.execute(
-                    "UPDATE sms_events SET status = %s, last_dlr = COALESCE(%s, last_dlr), updated_at = NOW() WHERE message_id = %s",
+                    """
+                    UPDATE sms_events
+                    SET status = %s,
+                        last_dlr = COALESCE(%s, last_dlr),
+                        updated_at = NOW()
+                    WHERE message_id = %s
+                    """,
                     (status, last_dlr, message_id),
                 )
 
 
-def update_sms_rewritten_body(message_id: str, rewritten_body: str) -> None:
+def assign_provider_message(sms_event_id: int, message_id: str, provider_status_code: int) -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE sms_events SET rewritten_body = %s, updated_at = NOW() WHERE message_id = %s",
-                (rewritten_body, message_id),
+                """
+                UPDATE sms_events
+                SET message_id = %s,
+                    provider_status = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (message_id, provider_status_code, sms_event_id),
             )
 
 
-def update_sms_segment_count(message_id: str, segment_count: int) -> None:
+def update_provider_status_by_message_id(message_id: str, provider_status_code: int) -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE sms_events SET segment_count = %s, updated_at = NOW() WHERE message_id = %s",
-                (segment_count, message_id),
+                """
+                UPDATE sms_events
+                SET provider_status = %s,
+                    updated_at = NOW()
+                WHERE message_id = %s
+                """,
+                (provider_status_code, message_id),
+            )
+
+
+def update_sms_rewritten_body_by_id(sms_event_id: int, rewritten_body: str) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sms_events SET rewritten_body = %s, updated_at = NOW() WHERE id = %s",
+                (rewritten_body, sms_event_id),
+            )
+
+
+def update_sms_segment_count_by_id(sms_event_id: int, segment_count: int) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sms_events SET segment_count = %s, updated_at = NOW() WHERE id = %s",
+                (segment_count, sms_event_id),
             )
 
 
@@ -88,7 +183,7 @@ def exists_duplicate_phone_body(phone: str, body: str, message_id: str, window_s
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM sms_events WHERE phone = %s AND body = %s AND message_id != %s AND created_at > NOW() - INTERVAL '1 second' * %s LIMIT 1",
+                "SELECT 1 FROM sms_events WHERE phone = %s AND body = %s AND COALESCE(message_id, '') != %s AND created_at > NOW() - INTERVAL '1 second' * %s LIMIT 1",
                 (phone, body, message_id, window_seconds),
             )
             return cur.fetchone() is not None
@@ -112,7 +207,7 @@ def get_duplicate_flags(message_id: str, phone: str, body: str, window_seconds: 
                         FROM sms_events
                         WHERE phone = %s
                           AND body = %s
-                          AND message_id != %s
+                          AND COALESCE(message_id, '') != %s
                           AND created_at > NOW() - INTERVAL '1 second' * %s
                         LIMIT 1
                     ) AS duplicate_phone_body
