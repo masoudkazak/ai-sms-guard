@@ -3,10 +3,14 @@
 AI SMS Guard is a simple queue-based SMS delivery pipeline (RabbitMQ) focused on cost and risk control. Messages are first stored in Postgres and published to a queue. A worker then applies a rule engine to decide whether to send immediately or escalate to an "AI Guard" (to avoid duplicates, expensive multipart messages, or risky retries).
 
 This project is meant to simulate/test scenarios like:
+
 - Preventing duplicate SMS sends (cost reduction + fewer user complaints)
 - Managing retries for temporary/permanent failures and sending suspicious cases to a DLQ
 - Using AI only when needed (cost-aware)
 - A lightweight dashboard for stats and cost estimates
+
+Additionally, by leveraging AI and analyzing historical data, we can take a user's phone number and desired time as input, and predict the probability (between 0 and 1) of the message successfully reaching the user, as well as suggest the optimal time to send the message.
+
 
 ## Architecture at a glance
 
@@ -62,26 +66,31 @@ docker compose -f docker-compose.dev.yml up --build -d
 
 - Backend: `http://localhost:8000`
 - Streamlit Dashboard + SMS Test: `http://localhost:8501`
-- RabbitMQ Management: `http://localhost:15672` (see `docker-compose.dev.yml` for ports)
 
-### 4) Quick test
+### 4) Test
 
-Queue an SMS:
-
-```bash
-curl -X POST "http://localhost:8000/sms" \
-  -H "Content-Type: application/json" \
-  -d '{"phone":"+989121234567","body":"Hello! This is a test message."}'
-```
-
-Fetch stats:
+After setting up and running the full project, you can populate the database with sample test data by running:
 
 ```bash
-curl "http://localhost:8000/stats"
+docker exec -it backend_dev python data_test.py
 ```
 
-Or use Streamlit:
-- Open `http://localhost:8501` and use the **Send SMS** page in the sidebar.
+This will add sample message history for the phone number:
+##### 09123456789
+
+Once the data is loaded, open the Streamlit dashboard at:
+
+<http://localhost:8501>
+
+From the sidebar, you can navigate to different pages and explore the following features:
+
+- View cost statistics – track your estimated SMS spending
+- Send a test SMS – try sending a message to any phone number
+- AI-powered delivery prediction – enter a phone number and desired time to get:
+  - A probability score (0 to 1) indicating how likely the message is to reach the user
+  - The best suggested time to send the message for maximum delivery chance
+
+Tip: For testing the AI prediction feature, use the number 09123456789 — it already has sample historical data in the database to generate meaningful predictions.
 
 ### 5) Stop services
 
@@ -98,12 +107,6 @@ make down-v
 ## Key configuration (summary)
 
 All key env vars are listed in `.env.example`. The most important ones:
-- `DATABASE_URL` / `DATABASE_URL_SYNC`: Postgres connection strings (backend async, worker sync)
-- `RABBITMQ_URL` and queue names: `RABBITMQ_MAIN_QUEUE`, `RABBITMQ_DLQ`
-- Rule engine thresholds:
-  - `DUPLICATE_WINDOW_SECONDS`
-  - `MAX_RETRY_BEFORE_DLQ`
-  - `MULTIPART_SEGMENT_THRESHOLD`
 - OpenRouter (AI Guard) settings:
   - `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_TIMEOUT`
   - `AI_DAILY_CALL_LIMIT`, `REDIS_URL` (Redis: Scenario 5 dedup + daily rate limit; UTC-based)
@@ -114,7 +117,3 @@ All key env vars are listed in `.env.example`. The most important ones:
 - `worker/`: queue consumers, rule engine, AI guard, sync DB connection
 - `streamlit/`: dashboard
 - `docker-compose.dev.yml`: local dev stack
-
-## Development notes
-
-- When `APP_ENV=DEV`, `backend`, `worker`, and `streamlit` auto-reload on code changes.
