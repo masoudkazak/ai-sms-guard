@@ -2,20 +2,20 @@ import asyncio
 import json
 import os
 import random
-import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from db import get_db
 from models import SmsEvent, SmsStatus
+from predictor import predict_sms_delivery_probability
 from publisher import _publish_to_main_queue
+from schemas import DeliveryPredictionResponse, SmsRequest, normalize_phone
 
 router = APIRouter()
 settings = get_settings()
@@ -63,36 +63,6 @@ def _ai_daily_key() -> str:
 
 def _pick_next_status_from_queue() -> int:
     return random.choice(_NEXT_PROVIDER_STATUS_POOL)
-
-
-class SmsRequest(BaseModel):
-    phone: str = Field(..., min_length=1, max_length=32)
-    body: str = Field(..., min_length=1)
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, v: str) -> str:
-        phone = (v or "").strip()
-        if not phone:
-            raise ValueError("phone is required")
-
-        phone = re.sub(r"[ \-\(\)]", "", phone)
-        if phone.startswith("00"):
-            phone = "+" + phone[2:]
-
-        if phone.startswith("+"):
-            digits = phone[1:]
-            if not digits.isdigit():
-                raise ValueError("phone must contain only digits (and an optional leading '+')")
-            if not (10 <= len(digits) <= 15):
-                raise ValueError("phone length must be 10..15 digits for E.164")
-            return "+" + digits
-
-        if not phone.isdigit():
-            raise ValueError("phone must contain only digits (and an optional leading '+')")
-        if not (10 <= len(phone) <= 15):
-            raise ValueError("phone length must be 10..15 digits")
-        return phone
 
 
 @router.get("/stats")
@@ -159,6 +129,21 @@ async def send_sms(request: SmsRequest, db: AsyncSession = Depends(get_db)):
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, lambda: _publish_to_main_queue(json.dumps(payload).encode()))
     return {"request_id": event.id, "status": "queued"}
+
+
+@router.get("/sms/predict-delivery", response_model=DeliveryPredictionResponse)
+async def predict_delivery(
+    phone: str = Query(..., min_length=10, max_length=16, description="Phone number"),
+    hour: int = Query(..., ge=0, le=24, description="Hour in UTC, 0..24 (24 maps to 0)"),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        normalized_phone = normalize_phone(phone)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    prediction = await predict_sms_delivery_probability(db=db, phone=normalized_phone, hour=hour)
+    return prediction
 
 
 @router.get("/sms/status")
