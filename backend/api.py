@@ -22,16 +22,16 @@ settings = get_settings()
 _redis_client = None
 
 _PROVIDER_STATUS_TEXT = {
-    1: "در صف ارسال قرار دارد",
-    2: "زمان بندی شده (ارسال در تاریخ معین)",
-    4: "ارسال شده به مخابرات",
-    5: "ارسال شده به مخابرات",
-    6: "خطا در ارسال پیام (Failed)",
-    10: "رسیده به گیرنده (Delivered)",
-    11: "نرسیده به گیرنده (Undelivered)",
-    13: "لغو/مشکل ارسال با بازگشت هزینه",
-    14: "بلاک شده (عدم تمایل گیرنده)",
-    100: "شناسه پیامک نامعتبر است",
+    1: "Queued for sending",
+    2: "Scheduled (send at a specified time)",
+    4: "Sent to carrier",
+    5: "Sent to carrier",
+    6: "Failed to send",
+    10: "Delivered",
+    11: "Undelivered",
+    13: "Cancelled/failed with refund",
+    14: "Blocked (recipient opted out)",
+    100: "Invalid message ID",
 }
 _FINAL_PROVIDER_CODES = {6, 10, 11, 13, 14, 100}
 _NEXT_PROVIDER_STATUS_POOL = (
@@ -195,7 +195,7 @@ async def get_sms_provider_status(message_id: str = Query(..., min_length=1), db
         "message_id": message_id,
         "provider_status": {
             "code": resolved_code,
-            "text": _PROVIDER_STATUS_TEXT.get(resolved_code, "وضعیت نامشخص"),
+            "text": _PROVIDER_STATUS_TEXT.get(resolved_code, "Unknown status"),
             "final": resolved_code in _FINAL_PROVIDER_CODES,
         },
         "pipeline_status": row["status"],

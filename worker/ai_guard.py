@@ -104,7 +104,7 @@ def call_ai_guard(
         return (
             {
                 "decision": "DROP",
-                "reason": "میزان استفاده از AI برای امروز تمام شد.",
+                "reason": "AI daily usage limit reached.",
                 "rate_limited": True,
                 "used_today": limit_result.used_today,
                 "limit": AI_DAILY_CALL_LIMIT,

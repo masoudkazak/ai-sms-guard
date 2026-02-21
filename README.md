@@ -1,6 +1,6 @@
 # AI SMS Guard
 
-AI SMS Guard is a simple queue-based SMS delivery pipeline (RabbitMQ) focused on cost and risk control. Messages are first stored in Postgres and published to a queue. A worker then applies a rule engine to decide whether to send immediately or escalate to an “AI Guard” (to avoid duplicates, expensive multipart messages, or risky retries).
+AI SMS Guard is a simple queue-based SMS delivery pipeline (RabbitMQ) focused on cost and risk control. Messages are first stored in Postgres and published to a queue. A worker then applies a rule engine to decide whether to send immediately or escalate to an "AI Guard" (to avoid duplicates, expensive multipart messages, or risky retries).
 
 This project is meant to simulate/test scenarios like:
 - Preventing duplicate SMS sends (cost reduction + fewer user complaints)
@@ -81,7 +81,7 @@ curl "http://localhost:8000/stats"
 ```
 
 Or use Streamlit:
-- Open `http://localhost:8501` and use the **ارسال SMS (تست سامانه)** page in the sidebar.
+- Open `http://localhost:8501` and use the **Send SMS** page in the sidebar.
 
 ### 5) Stop services
 

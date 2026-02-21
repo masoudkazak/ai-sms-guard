@@ -38,8 +38,8 @@ ai_today_remaining = int(ai_today.get("remaining", max(0, ai_today_limit - ai_to
 redis_ok = bool(ai_today.get("redis_ok", True))
 
 # AI token cost defaults (based on the ranges you provided):
-# - Input:  $0.10–$0.13 per 1M tokens  => $0.00010–$0.00013 per 1K tokens (default: midpoint $0.000115)
-# - Output: $0.32–$0.40 per 1M tokens  => $0.00032–$0.00040 per 1K tokens (default: midpoint $0.00036)
+# - Input:  $0.10-$0.13 per 1M tokens  => $0.00010-$0.00013 per 1K tokens (default: midpoint $0.000115)
+# - Output: $0.32-$0.40 per 1M tokens  => $0.00032-$0.00040 per 1K tokens (default: midpoint $0.00036)
 INPUT_COST_PER_1K = float(os.environ.get("INPUT_COST_PER_1K"))
 OUTPUT_COST_PER_1K = float(os.environ.get("OUTPUT_COST_PER_1K"))
 USD_TO_TOMAN = float(os.environ.get("USD_TO_TOMAN"))
@@ -51,15 +51,15 @@ COST_PER_SMS = float(os.environ.get("COST_PER_SMS"))
 cost_sms_saved = blocked * COST_PER_SMS
 net_saving = cost_sms_saved - cost_ai_toman
 
-st.metric("SMS ارسال شده", sent)
-st.metric("SMS بلاک شده", blocked)
-st.metric("تعداد AI Call", ai_calls)
-st.metric("AI امروز", f"{ai_today_used} / {ai_today_limit}")
-st.metric("باقی‌مانده AI امروز", ai_today_remaining)
+st.metric("SMS Sent", sent)
+st.metric("SMS Blocked", blocked)
+st.metric("AI Calls", ai_calls)
+st.metric("AI Today", f"{ai_today_used} / {ai_today_limit}")
+st.metric("AI Remaining Today", ai_today_remaining)
 if not redis_ok:
-    st.warning("Redis در دسترس نیست؛ rate limit ممکن است درست نمایش داده نشود.")
+    st.warning("Redis is unavailable; rate-limit metrics may be inaccurate.")
 elif ai_today_remaining <= 0:
-    st.warning("میزان استفاده از AI برای امروز تمام شد.")
-st.metric("هزینه تخمینی AI (تومان)", f"{cost_ai_toman}")
-st.metric("هزینه SMS صرفه‌جویی‌شده (تومان)", f"{cost_sms_saved}")
-st.metric("صرفه‌جویی خالص (تومان)", f"{net_saving}")
+    st.warning("AI daily usage limit reached.")
+st.metric("Estimated AI Cost (Toman)", f"{cost_ai_toman}")
+st.metric("Saved SMS Cost (Toman)", f"{cost_sms_saved}")
+st.metric("Net Savings (Toman)", f"{net_saving}")
